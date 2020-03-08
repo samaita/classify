@@ -1,7 +1,8 @@
-package identifier
+package classify
 
 import (
 	"database/sql"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -13,25 +14,34 @@ const (
 	falseClass bayesian.Class = "False"
 
 	tagSkipWord = "-"
+
+	scoreTruePositive = "1"
+	scoreTrueNegative = "-1"
+
+	errNoLibrary = "No Library being used"
+
+	pathLibraryCsv = "lib.csv"
 )
 
 var regexSanitize *regexp.Regexp
 
 type Bayesian struct {
 	Classifier             *bayesian.Classifier
-	LibraryData            map[string]string
-	LibrarySrc             Source
+	ModelID                string
 	TrainingData           map[string][]string
 	TrainingSrc            Source
 	SkipSanitizeOnGenerate bool
+
+	LibrarySrc  Source
+	LibraryData map[string]string
 }
 
 type Source struct {
-	DB       sql.DB
+	DB       *sql.DB
 	Filepath string
 }
 
-func (b *Bayesian) Init() error {
+func (b *Bayesian) init() error {
 	var err error
 
 	err = b.loadTrainingSrc()
@@ -49,7 +59,7 @@ func (b *Bayesian) Init() error {
 	return nil
 }
 
-func (b *Bayesian) Identify(input string) Classification {
+func (b *Bayesian) Classify(input string) Classification {
 	var clearInput []string
 	var likely int
 	var result Classification
@@ -69,14 +79,31 @@ func (b *Bayesian) Identify(input string) Classification {
 
 func (b *Bayesian) loadTrainingSrc() error {
 	var err error
+	var truePositive, trueNegative []string
+
+	dataTrainRaw := make(map[string]string)
 	dataTrain := make(map[string][]string)
 
 	if b.TrainingSrc.Filepath != "" {
-		// use it
+		dataTrainRaw, err = readFileToMapString(b.TrainingSrc.Filepath)
+		if err != nil {
+			return err
+		}
+
+		for k, v := range dataTrainRaw {
+			switch v {
+			case scoreTruePositive:
+				truePositive = append(truePositive, k)
+			case scoreTrueNegative:
+				trueNegative = append(trueNegative, k)
+			}
+		}
 	}
 
-	dataTrain["true"] = []string{}
-	dataTrain["false"] = []string{}
+	dataTrain["true"] = truePositive
+	dataTrain["false"] = trueNegative
+
+	logger(fmt.Sprintf("Load True Positive: %d, True Negative: %d", len(truePositive), len(trueNegative)))
 	b.TrainingData = dataTrain
 
 	return err
@@ -86,11 +113,19 @@ func (b *Bayesian) loadLibrarySrc() error {
 	var err error
 	dataLib := make(map[string]string)
 
+	b.LibrarySrc.Filepath = pathLibraryCsv
 	if b.LibrarySrc.Filepath != "" {
-		// use it
+		dataLib, err = readFileToMapString(b.LibrarySrc.Filepath)
+		if err != nil {
+			return err
+		}
+	} else {
+		logger(errNoLibrary)
+		return nil
 	}
 
 	b.LibraryData = dataLib
+	logger(fmt.Sprintf("Load Library: %d", len(dataLib)))
 
 	return err
 }
@@ -131,5 +166,5 @@ func (b *Bayesian) sanitizeInput(input []string) []string {
 }
 
 func (b *Bayesian) initRegex() {
-	regexSanitize = regexp.MustCompile("[^a-z]+")
+	regexSanitize = regexp.MustCompile("[^a-z]+") // only allow character
 }
