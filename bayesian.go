@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	bayesian "github.com/jbrukh/bayesian"
 )
@@ -57,6 +58,7 @@ func (b *Bayesian) Classify(input string) Classification {
 	var likely int
 	var result Classification
 	var scores []float64
+	t := time.Now()
 
 	clearInput = b.sanitizeInput([]string{input})
 	if len(clearInput) <= 0 {
@@ -64,6 +66,8 @@ func (b *Bayesian) Classify(input string) Classification {
 	}
 
 	scores, likely, _ = b.Classifier.ProbScores(clearInput)
+	logger(fmt.Sprintf("Time Spent on classify [%s]: %v", input, time.Since(t)))
+
 	return Classification{
 		Likely: likely == 0,
 		Score:  scores[0],
