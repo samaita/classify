@@ -28,12 +28,9 @@ var regexSanitize *regexp.Regexp
 type Bayesian struct {
 	Classifier             *bayesian.Classifier
 	ModelID                string
-	TrainingData           map[string][]string
-	TrainingSrc            Source
+	LibraryData            map[string]string
+	TrainingData           map[string]string
 	SkipSanitizeOnGenerate bool
-
-	LibrarySrc  Source
-	LibraryData map[string]string
 }
 
 type Source struct {
@@ -44,18 +41,14 @@ type Source struct {
 func (b *Bayesian) init() error {
 	var err error
 
-	err = b.loadTrainingSrc()
-	if err != nil {
-		return err
-	}
-
-	err = b.loadLibrarySrc()
-	if err != nil {
-		return err
-	}
-
 	b.initRegex()
-	b.generateTrainingData()
+
+	err = b.trainData()
+	if err != nil {
+		return err
+	}
+
+	logger(fmt.Sprintf("Load Library: %d", len(b.LibraryData)))
 	return nil
 }
 
@@ -77,20 +70,12 @@ func (b *Bayesian) Classify(input string) Classification {
 	}
 }
 
-func (b *Bayesian) loadTrainingSrc() error {
+func (b *Bayesian) trainData() error {
 	var err error
 	var truePositive, trueNegative []string
 
-	dataTrainRaw := make(map[string]string)
-	dataTrain := make(map[string][]string)
-
-	if b.TrainingSrc.Filepath != "" {
-		dataTrainRaw, err = readFileToMapString(b.TrainingSrc.Filepath)
-		if err != nil {
-			return err
-		}
-
-		for k, v := range dataTrainRaw {
+	if len(b.TrainingData) > 0 {
+		for k, v := range b.TrainingData {
 			switch v {
 			case scoreTruePositive:
 				truePositive = append(truePositive, k)
@@ -100,49 +85,13 @@ func (b *Bayesian) loadTrainingSrc() error {
 		}
 	}
 
-	dataTrain["true"] = truePositive
-	dataTrain["false"] = trueNegative
-
-	logger(fmt.Sprintf("Load True Positive: %d, True Negative: %d", len(truePositive), len(trueNegative)))
-	b.TrainingData = dataTrain
-
-	return err
-}
-
-func (b *Bayesian) loadLibrarySrc() error {
-	var err error
-	dataLib := make(map[string]string)
-
-	b.LibrarySrc.Filepath = pathLibraryCsv
-	if b.LibrarySrc.Filepath != "" {
-		dataLib, err = readFileToMapString(b.LibrarySrc.Filepath)
-		if err != nil {
-			return err
-		}
-	} else {
-		logger(errNoLibrary)
-		return nil
-	}
-
-	b.LibraryData = dataLib
-	logger(fmt.Sprintf("Load Library: %d", len(dataLib)))
-
-	return err
-}
-
-func (b *Bayesian) generateTrainingData() {
-	dataTrue := b.TrainingData["true"]
-	dataFalse := b.TrainingData["false"]
-
-	if !b.SkipSanitizeOnGenerate {
-		dataTrue = b.sanitizeInput(dataTrue)
-		dataFalse = b.sanitizeInput(dataFalse)
-	}
-
 	b.Classifier = bayesian.NewClassifierTfIdf(trueClass, falseClass) // Create a classifier with TF-IDF support.
-	b.Classifier.Learn(dataTrue, trueClass)
-	b.Classifier.Learn(dataFalse, falseClass)
+	b.Classifier.Learn(b.sanitizeInput(truePositive), trueClass)
+	b.Classifier.Learn(b.sanitizeInput(trueNegative), falseClass)
 	b.Classifier.ConvertTermsFreqToTfIdf() // required
+
+	logger(fmt.Sprintf("Train Data - True Positive: %d, True Negative: %d", len(truePositive), len(trueNegative)))
+	return err
 }
 
 func (b *Bayesian) sanitizeInput(input []string) []string {

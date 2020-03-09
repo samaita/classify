@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	NaiveBayes = "naive-bayes" // method naive bayes
+	MethodNaiveBayes = "naive-bayes" // method naive bayes
 
 	errClassify                           = "[classify]"
 	errClientInitClientIDorMethodRequired = "Client ID and method required"
@@ -14,10 +14,11 @@ const (
 )
 
 type Client struct {
-	ClientID    string
-	Method      string
-	Model       Classifier
-	TrainingSrc Source
+	ClientID     string
+	Method       string
+	Model        Classifier
+	TrainingData map[string]string
+	LibraryData  map[string]string
 }
 
 type Classifier interface {
@@ -37,7 +38,7 @@ func (c *Client) Init() error {
 	}
 
 	switch c.Method {
-	case NaiveBayes:
+	case MethodNaiveBayes:
 		model, err := c.initNaiveBayes()
 		if err != nil {
 			return errMsg(err.Error())
@@ -55,17 +56,17 @@ func (c *Client) initNaiveBayes() (Bayesian, error) {
 	var err error
 
 	b := Bayesian{
-		ModelID:     generateID(),
-		TrainingSrc: c.TrainingSrc,
+		ModelID:      generateID(),
+		LibraryData:  c.LibraryData,
+		TrainingData: c.TrainingData,
 	}
-
 	err = b.init()
 	return b, err
 }
 
 func (c *Client) Classify(input string) Classification {
 	switch c.Method {
-	case NaiveBayes:
+	case MethodNaiveBayes:
 		return c.Model.Classify(input)
 	default:
 		return Classification{

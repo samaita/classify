@@ -29,7 +29,8 @@ func readFileToArrayString(filename string) ([]string, error) {
 	return result, nil
 }
 
-func readFileToMapString(filename string) (map[string]string, error) {
+// ReadFileToMapString convert csv to map string, examples:
+func ReadFileToMapString(filename string) (map[string]string, error) {
 	result := make(map[string]string)
 
 	csvFile, err := os.Open(filename)
